@@ -5,10 +5,12 @@ import io
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
+from app.routers.identification import _decode_base64_image
 from app.schemas.identification import IdentificationResponse, Taxonomy
 
 
@@ -64,10 +66,23 @@ class IdentificationRouterTests(unittest.TestCase):
     def test_rejects_non_strict_base64(self) -> None:
         response = self.client.post("/api/identify", json={"image": "%%%invalid%%%"})
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "The image does not contain valid Base64.")
 
     def test_requires_exactly_one_source(self) -> None:
         response = self.client.post("/api/identify", json={})
         self.assertEqual(response.status_code, 422)
+
+
+class Base64DecodingTests(unittest.TestCase):
+    def test_error_message_is_in_english(self) -> None:
+        with self.assertRaises(HTTPException) as raised:
+            _decode_base64_image("%%%invalid%%")
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(
+            raised.exception.detail,
+            "The image does not contain valid Base64.",
+        )
 
 
 if __name__ == "__main__":

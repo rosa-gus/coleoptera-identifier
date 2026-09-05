@@ -2,49 +2,49 @@
 
 ![Coleoptera Identifier logo](./assets/coleoptera_logo.png)
 
-Protótipo de identificação visual taxonômica de besouros. A API usa o
-[BioCLIP](https://github.com/Imageomics/BioCLIP) no servidor e devolve a
-hipótese visual mais específica permitida por limiares heurísticos
-configurados: ordem, família, gênero ou espécie.
+A prototype for visual taxonomic identification of beetles. The API runs
+[BioCLIP](https://github.com/Imageomics/BioCLIP) on the server and returns the
+most specific visual hypothesis allowed by configured heuristic thresholds:
+order, family, genus, or species.
 
-O resultado **não é uma determinação taxonômica**. Algumas espécies exigem
-outras vistas, dados de coleta, escala, microscopia ou avaliação de um
-especialista.
+The result is **not a taxonomic determination**. Some species require additional
+views, collection metadata, scale, microscopy, or examination by a specialist.
 
-## Arquitetura
+## Architecture
 
 ```text
 Go CLI/TUI
-    │ imagem em Base64
+    │ Base64 image
     ▼
-FastAPI ── validação da imagem
+FastAPI ── image validation
     │
     ▼
-BioCLIP ── classificação geral por ordem
+BioCLIP ── general classification by order
     │
-    ├── não Coleoptera → sugestão fora da ordem
+    ├── outside Coleoptera → suggestion outside the order
     │
-    └── Coleoptera → candidatos taxonômicos + nível sugerido
+    └── Coleoptera → taxonomic candidates + suggested rank
                               │
-                              └── GBIF: normalização opcional do nome
+                              └── GBIF: optional name normalization
 ```
 
-O modelo é carregado apenas na primeira identificação. O endpoint de saúde e
-a inicialização da API não baixam pesos nem consultam serviços externos.
+The model is loaded only on the first identification request. Starting the API
+and accessing its health endpoint do not download model artifacts or contact
+external services.
 
-## Requisitos
+## Requirements
 
-- Python 3.10 ou mais recente, em uma versão suportada pelo PyTorch instalado.
-- `libmagic` instalado no sistema.
-- Memória e armazenamento suficientes para os artefatos do BioCLIP.
+- Python 3.10 or newer, using a version supported by the installed PyTorch release.
+- `libmagic` installed on the system.
+- Enough memory and storage for the BioCLIP artifacts.
 
-Em Debian/Ubuntu:
+On Debian or Ubuntu:
 
 ```bash
 sudo apt-get install libmagic1
 ```
 
-## Instalação
+## Installation
 
 ```bash
 python3 -m venv .venv
@@ -53,33 +53,66 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-O BioCLIP original, baseado em ViT-B/16, é o padrão por ser menor que o
-BioCLIP 2. Para baixar e preparar os artefatos antes de iniciar a API:
+The original BioCLIP model, based on ViT-B/16, is the default because it is
+smaller than BioCLIP 2. To download and initialize its artifacts before starting
+the API:
 
 ```bash
 python -m app.services.preload
 ```
 
-## Executar
+## Removing local model artifacts
+
+BioCLIP model weights and Tree of Life embeddings are stored in the Hugging Face
+cache, separately from the Python virtual environment. Preview the removal of
+only the default model artifacts first:
+
+```bash
+source .venv/bin/activate
+hf cache rm \
+  model/imageomics/bioclip \
+  dataset/imageomics/TreeOfLife-10M \
+  --dry-run
+```
+
+If the preview contains only the intended repositories, run the same command
+without `--dry-run`. The CLI requests confirmation before deleting anything:
+
+```bash
+hf cache rm \
+  model/imageomics/bioclip \
+  dataset/imageomics/TreeOfLife-10M
+```
+
+If `BIOCLIP_MODEL=hf-hub:imageomics/bioclip-2` was used, the corresponding targets
+are `model/imageomics/bioclip-2` and `dataset/imageomics/TreeOfLife-200M`.
+
+Removing these artifacts does not uninstall the Python dependencies. The next
+preload or identification request will download the selected model again.
+
+## Running the API
 
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-- Documentação OpenAPI: <http://localhost:8000/docs>
-- Saúde: <http://localhost:8000/health>
-- Cliente Go: [cli/README.md](./cli/README.md)
+- OpenAPI documentation: <http://localhost:8000/docs>
+- Health endpoint: <http://localhost:8000/health>
+- Go client: [cli/README.md](./cli/README.md)
+
+The Go client defaults to `en-US` and also ships with a `pt-BR` message catalog.
+Use `--lang pt-BR` or set `COLEOPTERA_LANG=pt-BR` to select Portuguese.
 
 ## API
 
 ```bash
-IMAGE_BASE64="$(base64 -w 0 foto.jpg)"
+IMAGE_BASE64="$(base64 -w 0 beetle.jpg)"
 curl -X POST http://localhost:8000/api/identify \
   -H 'Content-Type: application/json' \
   -d "{\"image\":\"$IMAGE_BASE64\"}"
 ```
 
-Resposta ilustrativa:
+Example response:
 
 ```json
 {
@@ -109,59 +142,60 @@ Resposta ilustrativa:
 }
 ```
 
-`confidence` é um escore interno não calibrado. Ele não representa a
-probabilidade empírica de a hipótese estar correta. Os escores dos candidatos
-de espécie são condicionais aos táxons de Coleoptera representados pelo modelo.
+`confidence` is an uncalibrated internal model score. It is not the empirical
+probability that the hypothesis is correct. Species candidate scores are
+conditional on the Coleoptera taxa represented by the model.
 
-## Configuração
+## Configuration
 
-| Variável | Padrão | Função |
+| Variable | Default | Purpose |
 |---|---:|---|
-| `BIOCLIP_MODEL` | `hf-hub:imageomics/bioclip` | Modelo OpenCLIP utilizado |
-| `BIOCLIP_DEVICE` | `cpu` | Dispositivo PyTorch, como `cpu` ou `cuda` |
-| `BIOCLIP_TOP_K` | `5` | Número de candidatos de espécie |
-| `BIOCLIP_ORDER_THRESHOLD` | `0.35` | Escore mínimo para aceitar a ordem sugerida |
-| `BIOCLIP_FAMILY_THRESHOLD` | `0.70` | Escore mínimo para sugerir família |
-| `BIOCLIP_GENUS_THRESHOLD` | `0.65` | Escore mínimo para sugerir gênero |
-| `BIOCLIP_SPECIES_THRESHOLD` | `0.60` | Escore mínimo para sugerir espécie |
-| `BIOCLIP_SPECIES_MARGIN` | `0.15` | Margem mínima entre as duas primeiras espécies |
-| `ENABLE_REMOTE_IMAGE_URLS` | `false` | Habilita download de imagens por URL |
-| `ALLOWED_IMAGE_HOSTS` | vazio | Lista de domínios permitidos, separada por vírgula |
+| `BIOCLIP_MODEL` | `hf-hub:imageomics/bioclip` | OpenCLIP model to use |
+| `BIOCLIP_DEVICE` | `cpu` | PyTorch device, such as `cpu` or `cuda` |
+| `BIOCLIP_TOP_K` | `5` | Number of species candidates |
+| `BIOCLIP_ORDER_THRESHOLD` | `0.35` | Minimum score for accepting the suggested order |
+| `BIOCLIP_FAMILY_THRESHOLD` | `0.70` | Minimum score for suggesting a family |
+| `BIOCLIP_GENUS_THRESHOLD` | `0.65` | Minimum score for suggesting a genus |
+| `BIOCLIP_SPECIES_THRESHOLD` | `0.60` | Minimum score for suggesting a species |
+| `BIOCLIP_SPECIES_MARGIN` | `0.15` | Minimum margin between the top two species |
+| `ENABLE_REMOTE_IMAGE_URLS` | `false` | Enables remote image downloads |
+| `ALLOWED_IMAGE_HOSTS` | empty | Comma-separated list of allowed domains |
 
-Os limiares são heurísticos até que sejam calibrados em um conjunto de
-avaliação representativo. Alterá-los não transforma o escore em probabilidade.
+The thresholds remain heuristic until they are calibrated on a representative
+evaluation set. Changing them does not turn the score into a probability.
 
-URLs remotas ficam desabilitadas por padrão. Quando habilitadas, a API bloqueia
-destinos locais/privados e revalida redirecionamentos. Para reduzir a superfície
-de ataque, prefira o envio da própria imagem.
+Remote URLs are disabled by default. When enabled, the API rejects local and
+private destinations and revalidates redirects. Sending the image directly is
+recommended to reduce the attack surface.
 
-## Testes
+## Tests
 
 ```bash
 python -m pytest
 cd cli && go test ./...
 ```
 
-Os testes do backend substituem o runtime BioCLIP por resultados determinísticos;
-eles não baixam pesos nem alegam medir acurácia científica. A avaliação científica
-deve usar um conjunto rotulado e separado, incluindo espécies fora do catálogo e
-imagens que não contenham Coleoptera.
+The backend tests replace the BioCLIP runtime with deterministic results. They do
+not download model weights or claim to measure scientific accuracy. Scientific
+evaluation requires a separate labeled dataset that includes species outside the
+catalog and images that do not contain Coleoptera.
 
-## Limitações científicas
+## Scientific limitations
 
-- A cobertura é limitada aos táxons presentes no Tree of Life usado pelo modelo.
-- Escores de redes neurais podem ser altos mesmo para imagens fora da distribuição.
-- A agregação por ordem pode refletir a quantidade desigual de táxons representados.
-- O modelo sempre compara a imagem com seu catálogo; ele não possui uma classe aberta
-  confiável para “organismo desconhecido” ou “imagem sem organismo”.
-- Espécies crípticas podem ser visualmente indistinguíveis em uma única fotografia.
-- A consulta ao GBIF normaliza nomes; ela não confirma a identificação da imagem.
-- Localidade, data, estágio de vida, sexo e escala ainda não entram no ranqueamento.
-- As revisões dos artefatos hospedados no Hugging Face ainda não são fixadas por hash.
-- Todo resultado em espécie deve ser tratado como candidato para confirmação.
+- Coverage is limited to taxa represented in the model's Tree of Life data.
+- Neural network scores can be high for out-of-distribution images.
+- Order-level aggregation may reflect unequal numbers of represented taxa.
+- The model always compares an image against its catalog; it does not provide a
+  reliable open-set class for an unknown organism or an image without an organism.
+- Cryptic species may be visually indistinguishable from a single photograph.
+- GBIF normalizes names; it does not confirm the image identification.
+- Location, date, life stage, sex, and scale are not yet used for ranking.
+- Hugging Face artifact revisions are not yet pinned by commit hash.
+- Every species-level result must be treated as a candidate for confirmation.
 
-## Créditos do modelo
+## Model credits
 
-O projeto utiliza `pybioclip` e o BioCLIP original. Consulte as publicações e
-licenças mantidas pelo projeto [Imageomics/BioCLIP](https://github.com/Imageomics/BioCLIP)
-antes de redistribuir artefatos do modelo.
+This project uses `pybioclip` and the original BioCLIP model. Review the
+publications and licenses maintained by
+[Imageomics/BioCLIP](https://github.com/Imageomics/BioCLIP) before redistributing
+model artifacts.

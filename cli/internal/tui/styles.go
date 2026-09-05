@@ -6,12 +6,14 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/luisgustavo/coleoptera_identifier/cli/internal/api"
+	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
 )
 
 var (
 	primaryGreen = lipgloss.Color("#B8D446")
 	mutedGreen   = lipgloss.Color("#73852C")
 	darkGreen    = lipgloss.Color("#2F3612")
+	trackGreen   = lipgloss.Color("#3F4A20")
 	black        = lipgloss.Color("#070903")
 	offWhite     = lipgloss.Color("#F3F7E9")
 
@@ -36,51 +38,60 @@ var (
 )
 
 // RenderResult presents current and future API contracts with the same visual identity.
-func RenderResult(result api.Identification, width int) string {
+func RenderResult(result api.Identification, width int, localizer *i18n.Localizer) string {
+	return renderResultWithPreview(result, "", width, localizer)
+}
+
+func renderResultWithPreview(
+	result api.Identification,
+	preview string,
+	width int,
+	localizer *i18n.Localizer,
+) string {
 	width = max(width, 32)
 	var body strings.Builder
-	body.WriteString(sectionTitle.Render("RESULTADO"))
+	body.WriteString(sectionTitle.Render(localizer.Text(i18n.TUIResult)))
 	body.WriteString("\n\n")
+	if preview != "" {
+		body.WriteString(lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(preview))
+		body.WriteString("\n\n")
+	}
 
 	name := result.Prediction
 	if name == "" {
 		name = result.Identification
 	}
-	writeField(&body, "Identificação", displayValue(name))
-	writeScoreField(&body, result.Confidence)
+	writeField(&body, localizer.Text(i18n.ResultIdentification), displayValue(name, localizer))
+	writeScoreField(&body, result.Confidence, localizer)
 	if !result.ConfidenceCalibrated {
-		writeField(&body, "Calibração", "não calibrado")
+		writeField(&body, localizer.Text(i18n.ResultCalibration), localizer.Text(i18n.ResultUncalibrated))
 	}
 
 	if result.ReachedRank != "" {
-		writeField(&body, "Nível sugerido", result.ReachedRank)
+		writeField(&body, localizer.Text(i18n.ResultSuggestedRank), rankLabel(result.ReachedRank, localizer))
 	}
 	if result.Taxonomy != nil {
 		body.WriteString("\n")
-		body.WriteString(renderTaxonomy(*result.Taxonomy))
+		body.WriteString(renderTaxonomy(*result.Taxonomy, localizer))
 	} else if result.Order != "" {
-		writeField(&body, "Ordem", result.Order)
+		writeField(&body, localizer.Text(i18n.ResultOrder), result.Order)
 	}
 	if result.DetectedClass != "" {
-		writeField(&body, "Classe detectada", result.DetectedClass)
+		writeField(&body, localizer.Text(i18n.ResultDetectedClass), result.DetectedClass)
 	}
 	if result.DetectedOrder != "" {
-		writeField(&body, "Ordem sugerida", result.DetectedOrder)
+		writeField(&body, localizer.Text(i18n.ResultSuggestedOrder), result.DetectedOrder)
 	}
 	if len(result.Candidates) > 0 {
 		body.WriteString("\n")
-		body.WriteString(labelStyle.Render("Alternativas"))
+		body.WriteString(labelStyle.Render(localizer.Text(i18n.ResultAlternatives)))
 		body.WriteString("\n")
 		for index, candidate := range result.Candidates {
 			if index == 3 {
 				break
 			}
-			body.WriteString(fmt.Sprintf("  %d. %s  %s\n", index+1, valueStyle.Render(safeText(candidate.ScientificName)), subtle.Render(fmt.Sprintf("%.1f%%", candidate.Confidence*100))))
+			body.WriteString(fmt.Sprintf("  %d. %s  %s\n", index+1, valueStyle.Render(safeText(candidate.ScientificName)), subtle.Render(localizer.Percent(candidate.Confidence))))
 		}
-	}
-	if result.RequiresExpertConfirmation {
-		body.WriteString("\n")
-		body.WriteString(noticeStyle.Width(width).Render("A espécie requer confirmação especializada."))
 	}
 	if result.Disclaimer != "" {
 		body.WriteString("\n\n")
@@ -97,18 +108,18 @@ func writeField(body *strings.Builder, label, value string) {
 	body.WriteString("\n")
 }
 
-func writeScoreField(body *strings.Builder, confidence float64) {
-	body.WriteString(labelStyle.Render("Escore do modelo:"))
+func writeScoreField(body *strings.Builder, confidence float64, localizer *i18n.Localizer) {
+	body.WriteString(labelStyle.Render(localizer.Text(i18n.ResultModelScore) + ":"))
 	body.WriteString(" ")
-	body.WriteString(valueStyle.Render(fmt.Sprintf("%.1f%%", confidence*100)))
+	body.WriteString(valueStyle.Render(localizer.Percent(confidence)))
 	body.WriteString("  ")
 	body.WriteString(confidenceBar(confidence, 18))
 	body.WriteString("\n")
 }
 
-func displayValue(value string) string {
+func displayValue(value string, localizer *i18n.Localizer) string {
 	if strings.TrimSpace(value) == "" {
-		return "não informado"
+		return localizer.Text(i18n.ResultNotProvided)
 	}
 	return value
 }
@@ -117,25 +128,25 @@ func confidenceBar(confidence float64, width int) string {
 	confidence = min(max(confidence, 0), 1)
 	filled := int(confidence*float64(width) + 0.5)
 	return lipgloss.NewStyle().Foreground(primaryGreen).Render(strings.Repeat("█", filled)) +
-		lipgloss.NewStyle().Foreground(darkGreen).Render(strings.Repeat("░", width-filled))
+		lipgloss.NewStyle().Foreground(trackGreen).Render(strings.Repeat("░", width-filled))
 }
 
-func renderTaxonomy(taxonomy api.Taxonomy) string {
+func renderTaxonomy(taxonomy api.Taxonomy, localizer *i18n.Localizer) string {
 	ranks := []struct {
 		label string
 		value string
 	}{
-		{"Reino", taxonomy.Kingdom},
-		{"Filo", taxonomy.Phylum},
-		{"Classe", taxonomy.Class},
-		{"Ordem", taxonomy.Order},
-		{"Família", taxonomy.Family},
-		{"Gênero", taxonomy.Genus},
-		{"Espécie", taxonomy.Species},
+		{localizer.Text(i18n.RankKingdom), taxonomy.Kingdom},
+		{localizer.Text(i18n.RankPhylum), taxonomy.Phylum},
+		{localizer.Text(i18n.RankClass), taxonomy.Class},
+		{localizer.Text(i18n.RankOrder), taxonomy.Order},
+		{localizer.Text(i18n.RankFamily), taxonomy.Family},
+		{localizer.Text(i18n.RankGenus), taxonomy.Genus},
+		{localizer.Text(i18n.RankSpecies), taxonomy.Species},
 	}
 
 	var body strings.Builder
-	body.WriteString(labelStyle.Render("Taxonomia"))
+	body.WriteString(labelStyle.Render(localizer.Text(i18n.ResultTaxonomy)))
 	body.WriteString("\n")
 	depth := 0
 	for _, rank := range ranks {
@@ -152,4 +163,20 @@ func renderTaxonomy(taxonomy api.Taxonomy) string {
 		depth++
 	}
 	return body.String()
+}
+
+func rankLabel(rank string, localizer *i18n.Localizer) string {
+	labels := map[string]i18n.Key{
+		"kingdom": i18n.RankKingdom,
+		"phylum":  i18n.RankPhylum,
+		"class":   i18n.RankClass,
+		"order":   i18n.RankOrder,
+		"family":  i18n.RankFamily,
+		"genus":   i18n.RankGenus,
+		"species": i18n.RankSpecies,
+	}
+	if key, ok := labels[strings.ToLower(rank)]; ok {
+		return localizer.Text(key)
+	}
+	return rank
 }

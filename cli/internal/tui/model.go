@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/luisgustavo/coleoptera_identifier/cli/internal/api"
+	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
 )
 
 const (
@@ -33,25 +34,28 @@ const (
 )
 
 type identifyResultMsg struct {
-	result api.Identification
-	err    error
+	result  api.Identification
+	preview string
+	err     error
 }
 
 // Model contains the main Bubble Tea interface state.
 type Model struct {
 	client       *api.Client
+	localizer    *i18n.Localizer
 	picker       filepicker.Model
 	spinner      spinner.Model
 	screen       screen
 	selectedPath string
+	preview      string
 	result       api.Identification
 	err          error
 	width        int
 	height       int
 }
 
-// New creates a TUI connected to the API client.
-func New(client *api.Client) Model {
+// New creates a localized TUI connected to the API client.
+func New(client *api.Client, localizer *i18n.Localizer) Model {
 	currentDirectory, err := os.Getwd()
 	if err != nil {
 		currentDirectory = "."
@@ -67,7 +71,7 @@ func New(client *api.Client) Model {
 	picker.ShowPermissions = false
 	picker.AutoHeight = false
 	picker.SetHeight(7)
-	applyPickerStyles(&picker)
+	applyPickerStyles(&picker, localizer)
 
 	activity := spinner.New(
 		spinner.WithSpinner(spinner.Points),
@@ -75,12 +79,13 @@ func New(client *api.Client) Model {
 	)
 
 	return Model{
-		client:  client,
-		picker:  picker,
-		spinner: activity,
-		screen:  selecting,
-		width:   defaultWidth,
-		height:  defaultHeight,
+		client:    client,
+		localizer: localizer,
+		picker:    picker,
+		spinner:   activity,
+		screen:    selecting,
+		width:     defaultWidth,
+		height:    defaultHeight,
 	}
 }
 
@@ -117,10 +122,16 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.selectedPath = absolutePath
 			m.screen = loading
-			return m, tea.Batch(cmd, m.spinner.Tick, identifyCmd(m.client, absolutePath))
+			previewWidth := min(m.contentWidth(), previewMaxWidth)
+			previewRows := clamp(m.height/4, 3, previewMaxRows)
+			return m, tea.Batch(
+				cmd,
+				m.spinner.Tick,
+				identifyCmd(m.client, absolutePath, previewWidth, previewRows),
+			)
 		}
 		if disabled, _ := m.picker.DidSelectDisabledFile(message); disabled {
-			m.err = fmt.Errorf("selecione uma imagem JPG, PNG, GIF, BMP ou WebP")
+			m.err = fmt.Errorf("select a JPG, PNG, GIF, BMP, or WebP image")
 		}
 		return m, cmd
 
@@ -132,6 +143,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.screen = result
 				m.result = msg.result
+				m.preview = msg.preview
 			}
 			return m, nil
 		}
@@ -153,7 +165,7 @@ func (m Model) View() tea.View {
 
 	switch m.screen {
 	case selecting:
-		body.WriteString(sectionTitle.Render("SELECIONE UMA IMAGEM"))
+		body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUISelectImage)))
 		body.WriteString("\n")
 		body.WriteString(subtle.Render(truncateText(safeText(m.picker.CurrentDirectory), contentWidth)))
 		body.WriteString("\n\n")
@@ -161,25 +173,25 @@ func (m Model) View() tea.View {
 		if m.err != nil {
 			body.WriteString("\n" + noticeStyle.Render(safeText(m.err.Error())))
 		}
-		body.WriteString("\n" + helpStyle.Render("↑/↓ navegar  •  enter abrir/selecionar  •  ← voltar  •  q sair"))
+		body.WriteString("\n" + helpStyle.Render(m.localizer.Text(i18n.TUINavigationHelp)))
 
 	case loading:
-		body.WriteString(sectionTitle.Render("ANALISANDO"))
+		body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUIAnalyzing)))
 		body.WriteString("\n\n")
-		body.WriteString(fmt.Sprintf("%s Enviando a imagem e aguardando a identificação…", m.spinner.View()))
+		body.WriteString(fmt.Sprintf("%s %s", m.spinner.View(), m.localizer.Text(i18n.TUISendingImage)))
 		body.WriteString("\n\n")
 		body.WriteString(subtle.Render(safeText(filepath.Base(m.selectedPath))))
-		body.WriteString("\n\n" + helpStyle.Render("q cancelar"))
+		body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUICancelHelp)))
 
 	case result:
-		body.WriteString(RenderResult(m.result, contentWidth))
-		body.WriteString("\n\n" + helpStyle.Render("r/enter analisar outra  •  q sair"))
+		body.WriteString(renderResultWithPreview(m.result, m.preview, contentWidth, m.localizer))
+		body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUIResultHelp)))
 
 	case failure:
-		body.WriteString(sectionTitle.Render("NÃO FOI POSSÍVEL IDENTIFICAR"))
+		body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUIFailure)))
 		body.WriteString("\n\n")
 		body.WriteString(noticeStyle.Width(contentWidth).Render(safeText(m.err.Error())))
-		body.WriteString("\n\n" + helpStyle.Render("r/enter tentar novamente  •  q sair"))
+		body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUIFailureHelp)))
 	}
 
 	panel := panelStyle.Width(panelWidth).Render(body.String())
@@ -194,19 +206,30 @@ func (m Model) View() tea.View {
 func (m *Model) reset() {
 	m.screen = selecting
 	m.selectedPath = ""
+	m.preview = ""
 	m.result = api.Identification{}
 	m.err = nil
 	m.picker.Path = ""
 }
 
-func identifyCmd(client *api.Client, path string) tea.Cmd {
+func identifyCmd(
+	client *api.Client,
+	path string,
+	previewWidth int,
+	previewRows int,
+) tea.Cmd {
 	return func() tea.Msg {
+		preview, _ := renderImagePreview(path, previewWidth, previewRows)
 		result, err := client.Identify(context.Background(), path)
-		return identifyResultMsg{result: result, err: err}
+		return identifyResultMsg{result: result, preview: preview, err: err}
 	}
 }
 
-func applyPickerStyles(picker *filepicker.Model) {
+func (m Model) contentWidth() int {
+	return clamp(m.width-4, minPanelWidth, maxPanelWidth) - 6
+}
+
+func applyPickerStyles(picker *filepicker.Model, localizer *i18n.Localizer) {
 	picker.Cursor = "›"
 	picker.Styles.Cursor = lipgloss.NewStyle().Foreground(primaryGreen).Bold(true)
 	picker.Styles.Directory = lipgloss.NewStyle().Foreground(primaryGreen).Bold(true)
@@ -215,7 +238,7 @@ func applyPickerStyles(picker *filepicker.Model) {
 	picker.Styles.DisabledFile = lipgloss.NewStyle().Foreground(darkGreen)
 	picker.Styles.DisabledSelected = lipgloss.NewStyle().Foreground(mutedGreen)
 	picker.Styles.FileSize = lipgloss.NewStyle().Foreground(mutedGreen).Width(7).Align(lipgloss.Right)
-	picker.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(mutedGreen).SetString("Nenhuma imagem encontrada.")
+	picker.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(mutedGreen).SetString(localizer.Text(i18n.TUIEmptyDirectory))
 }
 
 func renderHeader(width int) string {

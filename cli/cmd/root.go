@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"os"
 	"time"
 
 	"github.com/luisgustavo/coleoptera_identifier/cli/internal/config"
+	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -14,38 +16,49 @@ type options struct {
 	timeout time.Duration
 }
 
-var opts options
+func newRootCommand(localizer *i18n.Localizer) *cobra.Command {
+	opts := &options{}
+	language := string(localizer.Locale())
+	rootCommand := &cobra.Command{
+		Use:           "coleoptera",
+		Short:         localizer.Text(i18n.CLIRootShort),
+		Version:       version,
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runUI(cmd.Context(), opts, localizer)
+		},
+	}
 
-var rootCmd = &cobra.Command{
-	Use:           "coleoptera",
-	Short:         "Identifique besouros diretamente do terminal",
-	Version:       version,
-	SilenceErrors: true,
-	SilenceUsage:  true,
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		return runUI(cmd.Context())
-	},
-}
-
-func init() {
-	rootCmd.PersistentFlags().StringVar(
+	rootCommand.PersistentFlags().StringVar(
 		&opts.apiURL,
 		"api-url",
 		config.APIURL(),
-		"URL base da API (ou COLEOPTERA_API_URL)",
+		localizer.Text(i18n.CLIAPIURLHelp),
 	)
-	rootCmd.PersistentFlags().DurationVar(
+	rootCommand.PersistentFlags().DurationVar(
 		&opts.timeout,
 		"timeout",
 		60*time.Second,
-		"tempo máximo de uma identificação",
+		localizer.Text(i18n.CLITimeoutHelp),
+	)
+	rootCommand.PersistentFlags().StringVar(
+		&language,
+		"lang",
+		language,
+		localizer.Text(i18n.CLILanguageHelp),
 	)
 
-	rootCmd.AddCommand(newIdentifyCommand())
-	rootCmd.AddCommand(newUICommand())
+	rootCommand.AddCommand(newIdentifyCommand(opts, localizer))
+	rootCommand.AddCommand(newUICommand(opts, localizer))
+	return rootCommand
 }
 
 // Execute starts the command-line client.
 func Execute() error {
-	return rootCmd.Execute()
+	locale, err := i18n.ResolveLocale(os.Args[1:], os.LookupEnv)
+	if err != nil {
+		return err
+	}
+	return newRootCommand(i18n.NewLocalizer(locale)).Execute()
 }

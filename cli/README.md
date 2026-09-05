@@ -1,63 +1,75 @@
 # Coleoptera CLI
 
-Cliente de terminal em Go para a API Coleoptera Identifier. O modelo de visão
-continua no backend: este binário apenas seleciona a imagem, envia a requisição
-e apresenta o resultado.
+A Go terminal client for the Coleoptera Identifier API. The vision model remains
+on the backend: this binary only selects an image, sends the request, and displays
+the result.
 
-Os percentuais exibidos são escores não calibrados do modelo, não probabilidades
-de acerto. A interface apresenta o nível taxonômico como sugestão e mantém o
-aviso de confirmação especializada retornado pela API.
+Displayed percentages are uncalibrated model scores, not probabilities of a
+correct identification. The interface presents the taxonomic rank as a suggestion
+and displays the scientific disclaimer returned by the API.
 
-## Requisitos
+## Requirements
 
-- Go 1.25 ou mais recente para compilar.
-- Backend disponível em `http://localhost:8000` por padrão.
+- Go 1.25 or newer to compile the client.
+- A backend available at `http://localhost:8000` by default.
 
-## Executar
+## Running
 
 ```bash
 go run . ui
 ```
 
-Executar sem subcomando também abre a interface:
+Running without a subcommand also opens the interface:
 
 ```bash
 go run .
 ```
 
-Identificação direta, sem TUI:
+Run a direct identification without the TUI:
 
 ```bash
-go run . identify ../minha-imagem.jpg
-go run . identify ../minha-imagem.jpg --output json
+go run . identify ../beetle.jpg
+go run . identify ../beetle.jpg --output json
 ```
 
-Para apontar a outro backend:
+To use a different backend:
 
 ```bash
 export COLEOPTERA_API_URL=https://api.example.com
 go run . ui
 ```
 
-A mesma configuração pode ser passada com `--api-url`.
+The same value can be provided with `--api-url`.
 
-## Compilar
+The interface defaults to US English. Select Português do Brasil with a flag
+or environment variable:
+
+```bash
+go run . --lang pt-BR
+COLEOPTERA_LANG=pt-BR go run . ui
+```
+
+The `--lang` flag has precedence over `COLEOPTERA_LANG`. If neither is set, the
+interface remains in English regardless of the system locale. Error messages
+remain in English.
+
+## Building
 
 ```bash
 go build -o coleoptera .
 ./coleoptera ui
 ```
 
-## Atalhos da interface
+## Interface shortcuts
 
-- `↑`/`↓` ou `j`/`k`: navegar.
-- `enter`: abrir diretório ou selecionar imagem.
-- `←` ou `h`: voltar ao diretório anterior.
-- `r`: analisar outra imagem após um resultado.
-- `q`: sair.
+- `↑`/`↓` or `j`/`k`: navigate.
+- `enter`: open a directory or select an image.
+- `←` or `h`: return to the parent directory.
+- `r`: analyze another image after displaying a result.
+- `q`: quit.
 
-## Contrato atual
+## Current API contract
 
-O cliente envia `POST /api/identify` com a imagem em Base64, preservando o
-contrato atual do backend. A comunicação está isolada em `internal/api` para
-que uma futura migração para upload multipart não afete a TUI.
+The client sends a Base64 image to `POST /api/identify`, preserving the current
+backend contract. Communication is isolated in `internal/api`, allowing a future
+migration to multipart uploads without affecting the TUI.

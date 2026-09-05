@@ -64,6 +64,10 @@ class BioCLIPIdentifierTests(unittest.TestCase):
         response = self.identify(RawPrediction(detected_order="Lepidoptera", order_confidence=0.88))
 
         self.assertEqual(response.status, "not_coleoptera")
+        self.assertEqual(
+            response.identification,
+            "the model suggests it does not belong to the order Coleoptera",
+        )
         self.assertEqual(response.reached_rank, "order")
         self.assertTrue(response.requires_expert_confirmation)
         self.assertFalse(response.confidence_calibrated)
@@ -72,6 +76,7 @@ class BioCLIPIdentifierTests(unittest.TestCase):
         response = self.identify(RawPrediction(detected_order="Lepidoptera", order_confidence=0.2))
 
         self.assertEqual(response.status, "uncertain")
+        self.assertEqual(response.identification, "inconclusive visual classification")
         self.assertEqual(response.detected_order, "Lepidoptera")
         self.assertTrue(response.requires_expert_confirmation)
 
@@ -85,6 +90,10 @@ class BioCLIPIdentifierTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status, "uncertain")
+        self.assertEqual(
+            response.identification,
+            "possible organism of the order Coleoptera",
+        )
         self.assertEqual(response.reached_rank, "order")
         self.assertEqual(response.candidates, [])
 

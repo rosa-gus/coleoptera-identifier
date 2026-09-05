@@ -54,19 +54,19 @@ async def identify_insect_endpoint(payload: ImagePayload) -> IdentificationRespo
     try:
         response = await run_in_threadpool(identifier.identify, image_bytes)
     except InvalidImageError as exc:
-        raise HTTPException(status_code=400, detail="A imagem fornecida é inválida.") from exc
+        raise HTTPException(status_code=400, detail="The submitted image is invalid.") from exc
     except ModelUnavailableError as exc:
         raise HTTPException(
             status_code=503,
             detail=(
-                "O modelo taxonômico não está disponível. "
-                "Verifique os artefatos do BioCLIP no servidor."
+                "The taxonomic model is unavailable. "
+                "Check the BioCLIP artifacts on the server."
             ),
         ) from exc
     except IdentificationError as exc:
         raise HTTPException(
             status_code=500,
-            detail="Não foi possível concluir a identificação.",
+            detail="The identification could not be completed.",
         ) from exc
 
     await _enrich_species_with_gbif(response)
@@ -78,19 +78,19 @@ def _decode_base64_image(encoded: str) -> bytes:
 
     image_data = encoded.split(",", 1)[1] if "," in encoded else encoded
     if len(image_data) > MAX_BASE64_LENGTH:
-        raise HTTPException(status_code=413, detail="A imagem excede o limite de 10 MB.")
+        raise HTTPException(status_code=413, detail="The image exceeds the 10 MB limit.")
 
     try:
         image_bytes = base64.b64decode(image_data, validate=True)
     except (binascii.Error, ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail="A imagem não contém Base64 válido.") from exc
+        raise HTTPException(status_code=400, detail="The image does not contain valid Base64.") from exc
 
     if len(image_bytes) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=413, detail="A imagem excede o limite de 10 MB.")
+        raise HTTPException(status_code=413, detail="The image exceeds the 10 MB limit.")
     if not image_validator.validate_file_signature(image_bytes):
-        raise HTTPException(status_code=400, detail="O formato da imagem não é suportado.")
+        raise HTTPException(status_code=400, detail="The image format is not supported.")
     if not image_validator.validate_file_type(image_bytes):
-        raise HTTPException(status_code=400, detail="O conteúdo enviado não é uma imagem válida.")
+        raise HTTPException(status_code=400, detail="The submitted content is not a valid image.")
     return image_bytes
 
 

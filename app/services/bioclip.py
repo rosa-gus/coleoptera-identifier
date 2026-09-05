@@ -159,7 +159,7 @@ class BioCLIPIdentifier:
             detected = raw.detected_order or "unknown"
             return IdentificationResponse(
                 status="uncertain",
-                identification="classificação visual inconclusiva",
+                identification="inconclusive visual classification",
                 prediction=detected,
                 confidence=order_confidence,
                 detected_order=detected,
@@ -177,7 +177,7 @@ class BioCLIPIdentifier:
             detected = raw.detected_order or "unknown"
             return IdentificationResponse(
                 status="not_coleoptera",
-                identification="o modelo sugere que não pertence à ordem Coleoptera",
+                identification="the model suggests it does not belong to the order Coleoptera",
                 prediction=detected,
                 confidence=order_confidence,
                 detected_order=detected,
@@ -194,7 +194,7 @@ class BioCLIPIdentifier:
         if order_confidence < self.settings.order_threshold or not raw.candidates:
             return IdentificationResponse(
                 status="uncertain",
-                identification="possível organismo da ordem Coleoptera",
+                identification="possible organism of the order Coleoptera",
                 prediction=COLEOPTERA,
                 confidence=order_confidence,
                 order=COLEOPTERA,

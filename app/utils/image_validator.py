@@ -70,8 +70,8 @@ async def download_and_validate_image(url: str) -> bytes:
         raise HTTPException(
             status_code=400,
             detail=(
-                "URLs remotas estão desabilitadas ou o domínio não é permitido. "
-                "Envie a imagem em Base64."
+                "Remote image URLs are disabled or the domain is not allowed. "
+                "Submit the image as Base64."
             ),
         )
 
@@ -88,19 +88,19 @@ async def download_and_validate_image(url: str) -> bytes:
                         if redirect_count == MAX_REDIRECTS:
                             raise HTTPException(
                                 status_code=400,
-                                detail="A URL excedeu o limite de redirecionamentos.",
+                                detail="The URL exceeded the redirect limit.",
                             )
                         location = response.headers.get("location")
                         if not location:
                             raise HTTPException(
                                 status_code=400,
-                                detail="A URL retornou um redirecionamento inválido.",
+                                detail="The URL returned an invalid redirect.",
                             )
                         current_url = urljoin(current_url, location)
                         if not validate_url(current_url):
                             raise HTTPException(
                                 status_code=400,
-                                detail="O redirecionamento não é permitido.",
+                                detail="The redirect is not allowed.",
                             )
                         continue
 
@@ -109,7 +109,7 @@ async def download_and_validate_image(url: str) -> bytes:
                     if declared_size and int(declared_size) > MAX_FILE_SIZE:
                         raise HTTPException(
                             status_code=413,
-                            detail="A imagem excede o limite de 10 MB.",
+                            detail="The image exceeds the 10 MB limit.",
                         )
 
                     content = bytearray()
@@ -118,32 +118,32 @@ async def download_and_validate_image(url: str) -> bytes:
                         if len(content) > MAX_FILE_SIZE:
                             raise HTTPException(
                                 status_code=413,
-                                detail="A imagem excede o limite de 10 MB.",
+                                detail="The image exceeds the 10 MB limit.",
                             )
                     image_bytes = bytes(content)
                     break
             except httpx.TimeoutException as exc:
                 raise HTTPException(
                     status_code=408,
-                    detail="Tempo esgotado ao baixar a imagem.",
+                    detail="Timed out while downloading the image.",
                 ) from exc
             except httpx.HTTPStatusError as exc:
                 raise HTTPException(
                     status_code=400,
-                    detail="A URL da imagem retornou um erro HTTP.",
+                    detail="The image URL returned an HTTP error.",
                 ) from exc
             except httpx.RequestError as exc:
                 raise HTTPException(
                     status_code=400,
-                    detail="Não foi possível baixar a imagem.",
+                    detail="The image could not be downloaded.",
                 ) from exc
             except ValueError as exc:
                 raise HTTPException(
                     status_code=400,
-                    detail="A resposta contém tamanho inválido.",
+                    detail="The response contains an invalid size.",
                 ) from exc
         else:
-            raise HTTPException(status_code=400, detail="Não foi possível seguir a URL da imagem.")
+            raise HTTPException(status_code=400, detail="The image URL could not be followed.")
 
     if (
         not image_bytes
@@ -152,7 +152,7 @@ async def download_and_validate_image(url: str) -> bytes:
     ):
         raise HTTPException(
             status_code=400,
-            detail="O conteúdo baixado não é uma imagem suportada.",
+            detail="The downloaded content is not a supported image.",
         )
     return image_bytes
 
@@ -162,18 +162,18 @@ async def _assert_public_destination(url: str) -> None:
 
     hostname = urlparse(url).hostname
     if not hostname:
-        raise HTTPException(status_code=400, detail="A URL não contém um domínio válido.")
+        raise HTTPException(status_code=400, detail="The URL does not contain a valid domain.")
 
     try:
         addresses = await asyncio.to_thread(_resolve_addresses, hostname)
     except socket.gaierror as exc:
         raise HTTPException(
             status_code=400,
-            detail="Não foi possível resolver o domínio da imagem.",
+            detail="The image domain could not be resolved.",
         ) from exc
 
     if not addresses or any(not address.is_global for address in addresses):
-        raise HTTPException(status_code=400, detail="A URL aponta para uma rede não pública.")
+        raise HTTPException(status_code=400, detail="The URL points to a non-public network.")
 
 
 def _resolve_addresses(hostname: str) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:

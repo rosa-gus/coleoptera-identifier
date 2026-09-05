@@ -24,19 +24,19 @@ func TestIdentifySendsCurrentBackendContract(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/identify" {
-			t.Errorf("path inesperado: %s", r.URL.Path)
+			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.Method != http.MethodPost {
-			t.Errorf("método inesperado: %s", r.Method)
+			t.Errorf("unexpected method: %s", r.Method)
 		}
 
 		var payload identifyRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Errorf("payload inválido: %v", err)
+			t.Errorf("invalid payload: %v", err)
 		}
 		decoded, err := base64.StdEncoding.DecodeString(payload.Image)
 		if err != nil || string(decoded) != string(image) {
-			t.Errorf("imagem Base64 diferente da original")
+			t.Errorf("Base64 image differs from the original")
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -53,7 +53,7 @@ func TestIdentifySendsCurrentBackendContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Identification != "ladybug" || result.Order != "Coleoptera" {
-		t.Fatalf("resultado inesperado: %#v", result)
+		t.Fatalf("unexpected result: %#v", result)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestIdentifyReturnsBackendError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"detail":"imagem inválida"}`))
+		_, _ = w.Write([]byte(`{"detail":"invalid image"}`))
 	}))
 	defer server.Close()
 
@@ -76,15 +76,15 @@ func TestIdentifyReturnsBackendError(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = client.Identify(context.Background(), imagePath)
-	if err == nil || !strings.Contains(err.Error(), "imagem inválida") {
-		t.Fatalf("erro inesperado: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "invalid image") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestNewClientRejectsInvalidURL(t *testing.T) {
 	t.Parallel()
 	if _, err := NewClient("file:///tmp/api", time.Second); err == nil {
-		t.Fatal("esperava erro para URL sem HTTP(S)")
+		t.Fatal("expected an error for a non-HTTP(S) URL")
 	}
 }
 
@@ -95,6 +95,6 @@ func TestIdentifyRejectsUnsupportedExtension(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := client.Identify(context.Background(), "beetle.txt"); err == nil {
-		t.Fatal("esperava erro para extensão não suportada")
+		t.Fatal("expected an error for an unsupported extension")
 	}
 }
