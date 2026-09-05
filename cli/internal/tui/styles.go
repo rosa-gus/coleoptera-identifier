@@ -35,8 +35,7 @@ var (
 			Padding(1, 2)
 )
 
-// RenderResult apresenta contratos atuais e futuros da API com a mesma
-// identidade visual.
+// RenderResult presents current and future API contracts with the same visual identity.
 func RenderResult(result api.Identification, width int) string {
 	width = max(width, 32)
 	var body strings.Builder
@@ -48,10 +47,13 @@ func RenderResult(result api.Identification, width int) string {
 		name = result.Identification
 	}
 	writeField(&body, "Identificação", displayValue(name))
-	writeField(&body, "Confiança", fmt.Sprintf("%.1f%%  %s", result.Confidence*100, confidenceBar(result.Confidence, 18)))
+	writeScoreField(&body, result.Confidence)
+	if !result.ConfidenceCalibrated {
+		writeField(&body, "Calibração", "não calibrado")
+	}
 
 	if result.ReachedRank != "" {
-		writeField(&body, "Nível confiável", result.ReachedRank)
+		writeField(&body, "Nível sugerido", result.ReachedRank)
 	}
 	if result.Taxonomy != nil {
 		body.WriteString("\n")
@@ -61,6 +63,9 @@ func RenderResult(result api.Identification, width int) string {
 	}
 	if result.DetectedClass != "" {
 		writeField(&body, "Classe detectada", result.DetectedClass)
+	}
+	if result.DetectedOrder != "" {
+		writeField(&body, "Ordem sugerida", result.DetectedOrder)
 	}
 	if len(result.Candidates) > 0 {
 		body.WriteString("\n")
@@ -77,6 +82,10 @@ func RenderResult(result api.Identification, width int) string {
 		body.WriteString("\n")
 		body.WriteString(noticeStyle.Width(width).Render("A espécie requer confirmação especializada."))
 	}
+	if result.Disclaimer != "" {
+		body.WriteString("\n\n")
+		body.WriteString(subtle.Width(width).Render(safeText(result.Disclaimer)))
+	}
 
 	return body.String()
 }
@@ -85,6 +94,15 @@ func writeField(body *strings.Builder, label, value string) {
 	body.WriteString(labelStyle.Render(label + ":"))
 	body.WriteString(" ")
 	body.WriteString(valueStyle.Render(safeText(value)))
+	body.WriteString("\n")
+}
+
+func writeScoreField(body *strings.Builder, confidence float64) {
+	body.WriteString(labelStyle.Render("Escore do modelo:"))
+	body.WriteString(" ")
+	body.WriteString(valueStyle.Render(fmt.Sprintf("%.1f%%", confidence*100)))
+	body.WriteString("  ")
+	body.WriteString(confidenceBar(confidence, 18))
 	body.WriteString("\n")
 }
 

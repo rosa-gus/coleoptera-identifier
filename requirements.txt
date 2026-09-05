@@ -1,10 +1,6 @@
-fastapi
-uvicorn
-python-multipart
-pillow
-six
-httpx
-python-magic
-requests
-rich
-validators
+fastapi>=0.116,<1
+uvicorn>=0.35,<1
+pillow>=11,<13
+httpx>=0.28,<1
+python-magic>=0.4.27,<1
+pybioclip==2.1.6

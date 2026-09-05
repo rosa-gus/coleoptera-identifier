@@ -1,86 +1,98 @@
-# global biodiversity information facility (GBIF).
-# https://gbif.org | https://techdocs.gbif.org/en/openapi/
+"""Optional GBIF name normalization with an in-memory cache."""
 
-import requests
-from typing import Set
+from __future__ import annotations
 
-def get_coleoptera_taxa() -> Set[str]:
-    """
-    Busca taxóns da ordem Coleoptera no GBIF
-    """
-    try:
-        res = requests.get(
-            "https://api.gbif.org/v1/species/search",
-            params={
-                "q": "Coleoptera",
-                "rank": "ORDER",
-                "limit": 1
-            },
-            timeout=10
+import asyncio
+import logging
+import time
+from dataclasses import dataclass
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+GBIF_MATCH_URL = "https://api.gbif.org/v2/species/match"
+CACHE_TTL_SECONDS = 24 * 60 * 60
+
+
+@dataclass(frozen=True)
+class GBIFMatch:
+    """Accepted taxonomic information returned by GBIF."""
+
+    taxon_key: str | None
+    scientific_name: str
+    status: str | None
+
+
+class GBIFClient:
+    """Best-effort async client; GBIF failures never invalidate inference."""
+
+    def __init__(self, timeout: float = 3.0) -> None:
+        self._timeout = timeout
+        self._cache: dict[str, tuple[float, GBIFMatch | None]] = {}
+        self._lock = asyncio.Lock()
+
+    async def match_species(self, scientific_name: str) -> GBIFMatch | None:
+        """Normalize one scientific name against the GBIF backbone."""
+
+        key = scientific_name.casefold().strip()
+        if not key:
+            return None
+
+        now = time.monotonic()
+        cached = self._cache.get(key)
+        if cached and now - cached[0] < CACHE_TTL_SECONDS:
+            return cached[1]
+
+        async with self._lock:
+            cached = self._cache.get(key)
+            if cached and now - cached[0] < CACHE_TTL_SECONDS:
+                return cached[1]
+
+            match = await self._fetch_match(scientific_name)
+            self._cache[key] = (time.monotonic(), match)
+            return match
+
+    async def _fetch_match(self, scientific_name: str) -> GBIFMatch | None:
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(
+                    GBIF_MATCH_URL,
+                    params={
+                        "scientificName": scientific_name,
+                        "kingdom": "Animalia",
+                    },
+                )
+                response.raise_for_status()
+        except (httpx.HTTPError, ValueError):
+            logger.warning("GBIF normalization failed", exc_info=True)
+            return None
+
+        try:
+            data = response.json()
+        except ValueError:
+            logger.warning("GBIF returned invalid JSON", exc_info=True)
+            return None
+        usage = data.get("usage") or {}
+        accepted = data.get("acceptedUsage") or usage
+        canonical_name = (
+            accepted.get("canonicalName")
+            or usage.get("canonicalName")
+            or accepted.get("name")
+            or usage.get("name")
         )
-        res.raise_for_status()
-        
-        coleoptera_key = res.json()["results"][0]["key"]
-                
-        # buscar todos os taxóns filhos (gênero, espécies)
-        all_taxa = set()
-        offset = 0
-        limit = 100
-        
-        while True:
-            res = requests.get(
-                f"https://api.gbif.org/v1/species/{coleoptera_key}/children",
-                params={
-                    "limit": limit,
-                    "offset": offset
-                },
-                timeout=10
-            )
-            res.raise_for_status()
-            
-            data = res.json()
-            results = data.get("results", [])
-            
-            if not results:
-                break
-            
-            for result in results:
-                # add scientific name
-                if "canonicalName" in result:
-                    all_taxa.add(result["canonicalName"].lower())
-                    
-                # add english common name, if has
-                if "vernacularName" in result:
-                    all_taxa.add(result["vernacularName"].lower())
-                
-            offset += limit
-            
-            if offset >= 1000:
-                break
-            
-        common_names = {
-            "beetle", "ladybug", "ladybird", "ground beetle", "long-horned beetle",
-            "leaf beetle", "dung beetle", "rhinoceros beetle", "weevil", "firefly",
-            "stag beetle", "click beetle", "water beetle", "tiger beetle"
-        }
-        
-        all_taxa.update(common_names)
-        
-        return all_taxa
-    
-    except Exception as e: 
-        print(f"Erro ao buscar dados do GBIF: {e}")
-        return get_fallback_coleoptera_classes()
+        if not canonical_name:
+            return None
 
-def get_fallback_coleoptera_classes() -> Set[str]:
-    """
-    Lista de fallback com algumas classes de Coleoptera
-    """
-    return {
-        "beetle", "ladybug", "ladybird", "ground beetle", "carabid",
-        "long-horned beetle", "cerambycid", "leaf beetle", "chrysomelid",
-        "dung beetle", "scarab", "rhinoceros beetle", "weevil", "curculio",
-        "firefly", "lightning bug", "stag beetle", "rove beetle",
-        "water beetle", "tiger beetle", "click beetle", "jewel beetle",
-        "bark beetle", "darkling beetle", "blister beetle", "cucujid"
-    }
+        return GBIFMatch(
+            taxon_key=_as_optional_string(accepted.get("key") or usage.get("key")),
+            scientific_name=str(canonical_name),
+            status=_as_optional_string(accepted.get("status") or usage.get("status")),
+        )
+
+
+def _as_optional_string(value: object) -> str | None:
+    return str(value) if value is not None else None
+
+
+gbif_client = GBIFClient()

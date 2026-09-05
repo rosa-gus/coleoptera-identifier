@@ -4,6 +4,10 @@ Cliente de terminal em Go para a API Coleoptera Identifier. O modelo de visão
 continua no backend: este binário apenas seleciona a imagem, envia a requisição
 e apresenta o resultado.
 
+Os percentuais exibidos são escores não calibrados do modelo, não probabilidades
+de acerto. A interface apresenta o nível taxonômico como sugestão e mantém o
+aviso de confirmação especializada retornado pela API.
+
 ## Requisitos
 
 - Go 1.25 ou mais recente para compilar.

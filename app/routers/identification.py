@@ -1,53 +1,110 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import HttpUrl, BaseModel, model_validator
+"""HTTP endpoint for server-side taxonomic image suggestions."""
+
 import base64
 import binascii
-from typing import Optional
+from typing import Annotated
 
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field, HttpUrl, model_validator
+
+from app.schemas.identification import IdentificationResponse
+from app.services.bioclip import (
+    IdentificationError,
+    InvalidImageError,
+    ModelUnavailableError,
+    identifier,
+)
+from app.services.gbif import gbif_client
 from app.utils import image_validator
-from app.services.mobilenet import identify_image
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_BASE64_LENGTH = 4 * ((MAX_IMAGE_SIZE + 2) // 3)
+
 
 class ImagePayload(BaseModel):
-    image: Optional[str] = None
-    url: Optional[HttpUrl] = None
-    
-    @model_validator(mode='before')
-    @classmethod
-    def check_exclusive_fields(cls, data):
-        if ('image' in data and data['image']) and ('url' in data and data['url']):
-            raise ValueError('Forneça apenas "image" (Base64) ou "url", não ambos.')
-        if not ('image' in data and data['image']) and not ('url' in data and data['url']):
-            raise ValueError('Você deve fornecer "image" (Base64) ou "url".')
-        return data
+    """Exactly one supported image source."""
+
+    image: Annotated[str | None, Field(default=None, max_length=MAX_BASE64_LENGTH + 128)]
+    url: HttpUrl | None = None
+
+    @model_validator(mode="after")
+    def check_exclusive_fields(self) -> "ImagePayload":
+        if bool(self.image) == bool(self.url):
+            raise ValueError('Provide exactly one of "image" (Base64) or "url".')
+        return self
+
 
 router = APIRouter()
 
-@router.post("/identify")
-async def identify_insect_endpoint(payload: ImagePayload):
-    """
-    Recebe uma imagem (via URL ou Base64) e a envia para o serviço de identificação.
-    Retorna o invertebrado identificado, se o inseto for da ordem Coleoptera.
-    """
-    image_bytes: bytes
-    
+
+@router.post(
+    "/identify",
+    response_model=IdentificationResponse,
+    summary="Suggest a taxonomic identification for an image",
+)
+async def identify_insect_endpoint(payload: ImagePayload) -> IdentificationResponse:
+    """Return the most specific defensible rank and species candidates."""
+
     if payload.url:
         image_bytes = await image_validator.download_and_validate_image(str(payload.url))
-    
-    elif payload.image:
-        image_data = payload.image
-        if "," in image_data:
-            _, image_data = image_data.split(",", 1)
-    
-        try:
-            image_bytes = base64.b64decode(image_data)
-            if not image_validator.validate_file_signature(image_bytes) or not image_validator.validate_file_type(image_bytes):
-                raise HTTPException(status_code=400, detail="A imagem fornecida em Base64 não é um formato válido ou suportado.")
-        except (binascii.Error, TypeError):
-            raise HTTPException(status_code=400, detail="A string da imagem não é um Base64 válido.")
-    
-    result = await identify_image(image_bytes)
-    
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    
-    return result
+    else:
+        image_bytes = _decode_base64_image(payload.image or "")
+
+    try:
+        response = await run_in_threadpool(identifier.identify, image_bytes)
+    except InvalidImageError as exc:
+        raise HTTPException(status_code=400, detail="A imagem fornecida é inválida.") from exc
+    except ModelUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "O modelo taxonômico não está disponível. "
+                "Verifique os artefatos do BioCLIP no servidor."
+            ),
+        ) from exc
+    except IdentificationError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível concluir a identificação.",
+        ) from exc
+
+    await _enrich_species_with_gbif(response)
+    return response
+
+
+def _decode_base64_image(encoded: str) -> bytes:
+    """Strictly decode Base64 while enforcing the same limit as URL downloads."""
+
+    image_data = encoded.split(",", 1)[1] if "," in encoded else encoded
+    if len(image_data) > MAX_BASE64_LENGTH:
+        raise HTTPException(status_code=413, detail="A imagem excede o limite de 10 MB.")
+
+    try:
+        image_bytes = base64.b64decode(image_data, validate=True)
+    except (binascii.Error, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="A imagem não contém Base64 válido.") from exc
+
+    if len(image_bytes) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=413, detail="A imagem excede o limite de 10 MB.")
+    if not image_validator.validate_file_signature(image_bytes):
+        raise HTTPException(status_code=400, detail="O formato da imagem não é suportado.")
+    if not image_validator.validate_file_type(image_bytes):
+        raise HTTPException(status_code=400, detail="O conteúdo enviado não é uma imagem válida.")
+    return image_bytes
+
+
+async def _enrich_species_with_gbif(response: IdentificationResponse) -> None:
+    """Attach accepted-name metadata without changing the visual prediction."""
+
+    if response.reached_rank != "species" or not response.candidates:
+        return
+
+    top = response.candidates[0]
+    match = await gbif_client.match_species(top.scientific_name)
+    if match is None:
+        return
+
+    top.gbif_taxon_key = match.taxon_key
+    top.accepted_scientific_name = match.scientific_name
+    top.taxonomic_status = match.status

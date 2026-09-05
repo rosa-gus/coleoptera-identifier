@@ -1,4 +1,4 @@
-// Package tui contém a interface interativa do cliente Coleoptera.
+// Package tui contains the interactive Coleoptera client.
 package tui
 
 import (
@@ -37,7 +37,7 @@ type identifyResultMsg struct {
 	err    error
 }
 
-// Model é o estado principal da interface Bubble Tea.
+// Model contains the main Bubble Tea interface state.
 type Model struct {
 	client       *api.Client
 	picker       filepicker.Model
@@ -50,7 +50,7 @@ type Model struct {
 	height       int
 }
 
-// New cria uma TUI ligada ao cliente da API.
+// New creates a TUI connected to the API client.
 func New(client *api.Client) Model {
 	currentDirectory, err := os.Getwd()
 	if err != nil {
@@ -65,6 +65,7 @@ func New(client *api.Client) Model {
 	}
 	picker.ShowHidden = false
 	picker.ShowPermissions = false
+	picker.AutoHeight = false
 	picker.SetHeight(7)
 	applyPickerStyles(&picker)
 

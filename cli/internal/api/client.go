@@ -1,4 +1,4 @@
-// Package api implementa o contrato HTTP entre o cliente Go e o backend.
+// Package api implements the HTTP contract between the Go client and backend.
 package api
 
 import (
@@ -31,19 +31,21 @@ var allowedExtensions = map[string]struct{}{
 	".webp": {},
 }
 
-// Client envia imagens para o backend sem executar modelos localmente.
+// Client sends images to the backend without running models locally.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// Identification representa tanto o contrato atual quanto os campos previstos
-// para a evolução taxonômica da API.
+// Identification supports both the current contract and its taxonomic evolution.
 type Identification struct {
 	Identification             string      `json:"identification,omitempty"`
 	Confidence                 float64     `json:"confidence"`
+	ConfidenceCalibrated       bool        `json:"confidence_calibrated"`
+	ConfidenceInterpretation   string      `json:"confidence_interpretation,omitempty"`
 	Order                      string      `json:"order,omitempty"`
 	DetectedClass              string      `json:"detected_class,omitempty"`
+	DetectedOrder              string      `json:"detected_order,omitempty"`
 	Status                     string      `json:"status,omitempty"`
 	Prediction                 string      `json:"prediction,omitempty"`
 	ReachedRank                string      `json:"reached_rank,omitempty"`
@@ -51,9 +53,12 @@ type Identification struct {
 	Candidates                 []Candidate `json:"candidates,omitempty"`
 	RequiresExpertConfirmation bool        `json:"requires_expert_confirmation,omitempty"`
 	ModelVersion               string      `json:"model_version,omitempty"`
+	ScoreScope                 string      `json:"score_scope,omitempty"`
+	CandidateScope             string      `json:"candidate_scope,omitempty"`
+	Disclaimer                 string      `json:"disclaimer,omitempty"`
 }
 
-// Taxonomy descreve a classificação retornada por uma versão futura do backend.
+// Taxonomy describes the classification returned by the taxonomic backend.
 type Taxonomy struct {
 	Kingdom string `json:"kingdom,omitempty"`
 	Phylum  string `json:"phylum,omitempty"`
@@ -64,10 +69,15 @@ type Taxonomy struct {
 	Species string `json:"species,omitempty"`
 }
 
-// Candidate é uma identificação alternativa ordenada por confiança.
+// Candidate is an alternative identification ordered by model score.
 type Candidate struct {
-	ScientificName string  `json:"scientific_name"`
-	Confidence     float64 `json:"confidence"`
+	ScientificName         string   `json:"scientific_name"`
+	CommonName             string   `json:"common_name,omitempty"`
+	Confidence             float64  `json:"confidence"`
+	Taxonomy               Taxonomy `json:"taxonomy"`
+	GBIFTaxonKey           string   `json:"gbif_taxon_key,omitempty"`
+	AcceptedScientificName string   `json:"accepted_scientific_name,omitempty"`
+	TaxonomicStatus        string   `json:"taxonomic_status,omitempty"`
 }
 
 type identifyRequest struct {
@@ -78,7 +88,7 @@ type errorResponse struct {
 	Detail json.RawMessage `json:"detail"`
 }
 
-// NewClient valida a URL e cria um cliente com timeout explícito.
+// NewClient validates the URL and creates a client with an explicit timeout.
 func NewClient(baseURL string, timeout time.Duration) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	parsed, err := url.Parse(baseURL)
@@ -95,7 +105,7 @@ func NewClient(baseURL string, timeout time.Duration) (*Client, error) {
 	}, nil
 }
 
-// Identify lê uma imagem local e a envia usando o contrato Base64 atual.
+// Identify reads a local image and sends it using the current Base64 contract.
 func (c *Client) Identify(ctx context.Context, imagePath string) (Identification, error) {
 	image, err := readImage(imagePath)
 	if err != nil {

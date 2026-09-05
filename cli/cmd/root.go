@@ -45,7 +45,7 @@ func init() {
 	rootCmd.AddCommand(newUICommand())
 }
 
-// Execute inicia o cliente de linha de comando.
+// Execute starts the command-line client.
 func Execute() error {
 	return rootCmd.Execute()
 }

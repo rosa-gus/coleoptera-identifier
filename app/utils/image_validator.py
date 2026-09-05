@@ -1,73 +1,181 @@
-from fastapi import HTTPException
+"""Image format checks and guarded remote downloads."""
+
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+import os
+import socket
+from urllib.parse import urljoin, urlparse
+
 import httpx
 import magic
-from urllib.parse import urlparse
+from fastapi import HTTPException
+
+MAX_FILE_SIZE = 10 * 1024 * 1024
+MAX_REDIRECTS = 3
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/gif", "image/bmp", "image/webp"}
+SIGNATURES = (
+    b"\xff\xd8\xff",
+    b"\x89PNG\r\n\x1a\n",
+    b"GIF8",
+    b"BM",
+    b"RIFF",
+)
+
 
 def validate_url(url: str) -> bool:
-    """VValida se a URL é segura e permitida."""
+    """Perform syntax and allow-list checks before resolving a remote URL."""
+
+    if os.getenv("ENABLE_REMOTE_IMAGE_URLS", "false").casefold() != "true":
+        return False
+
     try:
         parsed = urlparse(url)
-        if parsed.scheme not in ['http', 'https']:
-            return False
-        
-        # Restringir domínios
-        # ALLOWED_DOMAINS = {'i.imgur.com', 'images.unsplash.com'}
-        # if parsed.netloc not in ALLOWED_DOMAINS:
-        #     return False
-        
-        return True
-    except Exception:
+    except ValueError:
         return False
-    
+
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    if parsed.username or parsed.password:
+        return False
+
+    allowed_hosts = {
+        host.strip().casefold()
+        for host in os.getenv("ALLOWED_IMAGE_HOSTS", "").split(",")
+        if host.strip()
+    }
+    return not allowed_hosts or parsed.hostname.casefold() in allowed_hosts
+
+
 def validate_file_signature(content: bytes) -> bool:
-    """Verifica a assinatura do arquivo (magic numbers) para tipos de imagem comuns."""
-    SIGNATURES = {
-        b'\xff\xd8\xff': 'image/jpeg',
-        b'\x89PNG\r\n\x1a\n': 'image/png',
-        b'GIF8': 'image/gif',
-        b'BM': 'image/bmp',
-        b'RIFF': 'image/webp'
-     }
-    for signature in SIGNATURES:
-        if content.startswith(signature):
-            return True
-    return False
+    """Check common image magic numbers before invoking an image decoder."""
+
+    return any(content.startswith(signature) for signature in SIGNATURES)
+
 
 def validate_file_type(content: bytes) -> bool:
-    """Verifica o MIME type do conteúdo usando python-magic."""
-    ALLOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'}
+    """Validate the detected MIME type with libmagic."""
+
     try:
-        file_type = magic.from_buffer(content, mime=True)
-        return file_type in ALLOWED_MIME_TYPES
+        return magic.from_buffer(content, mime=True) in ALLOWED_MIME_TYPES
     except Exception:
         return False
-    
+
+
 async def download_and_validate_image(url: str) -> bytes:
-    """Faz o download da imagem e aplica múltiplas validações de segurança."""
+    """Download a public image while limiting redirects, time, and memory."""
+
     if not validate_url(url):
-        raise HTTPException(status_code=400, detail="URL fornecida é inválida ou não permitida.")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "URLs remotas estão desabilitadas ou o domínio não é permitido. "
+                "Envie a imagem em Base64."
+            ),
+        )
 
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-    TIMEOUT = 30
-    headers = {'User-Agent': 'ColeopteraIdentificator/0.0.1'}
+    timeout = httpx.Timeout(30.0, connect=5.0)
+    headers = {"User-Agent": "ColeopteraIdentifier/0.1.0"}
+    current_url = url
 
-    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as client:
-        try:
-            async with client.stream('GET', url, headers=headers) as response:
-                response.raise_for_status()
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        for redirect_count in range(MAX_REDIRECTS + 1):
+            await _assert_public_destination(current_url)
+            try:
+                async with client.stream("GET", current_url, headers=headers) as response:
+                    if response.is_redirect:
+                        if redirect_count == MAX_REDIRECTS:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="A URL excedeu o limite de redirecionamentos.",
+                            )
+                        location = response.headers.get("location")
+                        if not location:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="A URL retornou um redirecionamento inválido.",
+                            )
+                        current_url = urljoin(current_url, location)
+                        if not validate_url(current_url):
+                            raise HTTPException(
+                                status_code=400,
+                                detail="O redirecionamento não é permitido.",
+                            )
+                        continue
 
-                content = b''
-                async for chunk in response.aiter_bytes():
-                    content += chunk
-                    if len(content) > MAX_FILE_SIZE:
-                        raise HTTPException(status_code=413, detail="Arquivo de imagem excede o tamanho máximo de 10MB.")
-        except httpx.TimeoutException:
-            raise HTTPException(status_code=408, detail="Timeout ao baixar a imagem.")
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=400, detail=f"Erro ao requisitar a imagem da URL: {e}")
+                    response.raise_for_status()
+                    declared_size = response.headers.get("content-length")
+                    if declared_size and int(declared_size) > MAX_FILE_SIZE:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="A imagem excede o limite de 10 MB.",
+                        )
 
-    # Validações pós-download
-    if not validate_file_signature(content) or not validate_file_type(content):
-        raise HTTPException(status_code=400, detail="O arquivo baixado não é um formato de imagem válido ou suportado.")
-    
-    return content
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > MAX_FILE_SIZE:
+                            raise HTTPException(
+                                status_code=413,
+                                detail="A imagem excede o limite de 10 MB.",
+                            )
+                    image_bytes = bytes(content)
+                    break
+            except httpx.TimeoutException as exc:
+                raise HTTPException(
+                    status_code=408,
+                    detail="Tempo esgotado ao baixar a imagem.",
+                ) from exc
+            except httpx.HTTPStatusError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="A URL da imagem retornou um erro HTTP.",
+                ) from exc
+            except httpx.RequestError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Não foi possível baixar a imagem.",
+                ) from exc
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="A resposta contém tamanho inválido.",
+                ) from exc
+        else:
+            raise HTTPException(status_code=400, detail="Não foi possível seguir a URL da imagem.")
+
+    if (
+        not image_bytes
+        or not validate_file_signature(image_bytes)
+        or not validate_file_type(image_bytes)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="O conteúdo baixado não é uma imagem suportada.",
+        )
+    return image_bytes
+
+
+async def _assert_public_destination(url: str) -> None:
+    """Reject hosts that resolve to loopback, private, or link-local networks."""
+
+    hostname = urlparse(url).hostname
+    if not hostname:
+        raise HTTPException(status_code=400, detail="A URL não contém um domínio válido.")
+
+    try:
+        addresses = await asyncio.to_thread(_resolve_addresses, hostname)
+    except socket.gaierror as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Não foi possível resolver o domínio da imagem.",
+        ) from exc
+
+    if not addresses or any(not address.is_global for address in addresses):
+        raise HTTPException(status_code=400, detail="A URL aponta para uma rede não pública.")
+
+
+def _resolve_addresses(hostname: str) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    records = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    return {ipaddress.ip_address(record[4][0]) for record in records}
