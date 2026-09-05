@@ -7,6 +7,9 @@ A prototype for visual taxonomic identification of beetles. The API runs
 most specific visual hypothesis allowed by configured heuristic thresholds:
 order, family, genus, or species.
 
+This project is free software licensed under the **GNU General Public License
+v3.0 (GPL-3.0-only)**. See the complete terms in [`LICENSE.txt`](./LICENSE.txt).
+
 The result is **not a taxonomic determination**. Some species require additional
 views, collection metadata, scale, microscopy, or examination by a specialist.
 
