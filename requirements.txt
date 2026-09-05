@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+pillow
+six
+httpx
+python-magic
+requests
+rich
+validators
