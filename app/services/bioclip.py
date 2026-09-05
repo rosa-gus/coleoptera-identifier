@@ -154,27 +154,6 @@ class BioCLIPIdentifier:
     ) -> IdentificationResponse:
         order_confidence = _probability(raw.order_confidence)
 
-        if (
-            raw.detected_order.casefold() != COLEOPTERA.casefold()
-            and order_confidence < self.settings.order_threshold
-        ):
-            detected = raw.detected_order or "unknown"
-            return IdentificationResponse(
-                status="uncertain",
-                identification="inconclusive visual classification",
-                prediction=detected,
-                confidence=order_confidence,
-                detected_order=detected,
-                reached_rank="order",
-                taxonomy=Taxonomy(order=detected),
-                requires_expert_confirmation=True,
-                model_version=model_version,
-                score_scope=(
-                    "Species-level scores aggregated by order across the full "
-                    "represented Tree of Life."
-                ),
-            )
-
         if raw.detected_order.casefold() != COLEOPTERA.casefold():
             detected = raw.detected_order or "unknown"
             return IdentificationResponse(

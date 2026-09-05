@@ -42,3 +42,39 @@ func TestFailureRemainsInEnglishWithPortugueseInterface(t *testing.T) {
 		}
 	}
 }
+
+func TestLanguageMenuAppliesLocaleAndUpdatesPicker(t *testing.T) {
+	model := New(nil, i18n.NewLocalizer(i18n.EnglishUS))
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "l"})
+	model = updated.(Model)
+	if !model.languageMenu {
+		t.Fatal("language menu did not open")
+	}
+
+	updated, _ = model.Update(tea.KeyPressMsg{Text: "down"})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyPressMsg{Text: "enter"})
+	model = updated.(Model)
+	if model.languageMenu {
+		t.Fatal("language menu remained open after applying")
+	}
+	if model.localizer.Locale() != i18n.PortugueseBR {
+		t.Fatalf("expected pt-BR, got %s", model.localizer.Locale())
+	}
+	if !strings.Contains(model.View().Content, "SELECIONE UMA IMAGEM") {
+		t.Fatal("TUI did not render the applied Portuguese catalog")
+	}
+}
+
+func TestLanguageMenuEscapePreservesLocale(t *testing.T) {
+	model := New(nil, i18n.NewLocalizer(i18n.EnglishUS))
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "l"})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyPressMsg{Text: "down"})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyPressMsg{Text: "esc"})
+	model = updated.(Model)
+	if model.languageMenu || model.localizer.Locale() != i18n.EnglishUS {
+		t.Fatal("escaping language menu changed the locale")
+	}
+}

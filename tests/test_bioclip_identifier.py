@@ -16,7 +16,7 @@ from app.services.bioclip import (
 
 def image_bytes() -> bytes:
     buffer = io.BytesIO()
-    Image.new("RGB", (16, 16), "green").save(buffer, format="PNG")
+    Image.new("RGB", (64, 64), "green").save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -72,11 +72,14 @@ class BioCLIPIdentifierTests(unittest.TestCase):
         self.assertTrue(response.requires_expert_confirmation)
         self.assertFalse(response.confidence_calibrated)
 
-    def test_non_coleoptera_is_uncertain_when_order_score_is_low(self) -> None:
+    def test_non_coleoptera_is_out_of_scope_when_order_score_is_low(self) -> None:
         response = self.identify(RawPrediction(detected_order="Lepidoptera", order_confidence=0.2))
 
-        self.assertEqual(response.status, "uncertain")
-        self.assertEqual(response.identification, "inconclusive visual classification")
+        self.assertEqual(response.status, "not_coleoptera")
+        self.assertEqual(
+            response.identification,
+            "the model suggests it does not belong to the order Coleoptera",
+        )
         self.assertEqual(response.detected_order, "Lepidoptera")
         self.assertTrue(response.requires_expert_confirmation)
 

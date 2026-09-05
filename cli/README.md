@@ -66,6 +66,7 @@ go build -o coleoptera .
 - `enter`: open a directory or select an image.
 - `←` or `h`: return to the parent directory.
 - `r`: analyze another image after displaying a result.
+- `l`: open the language selector.
 - `q`: quit.
 
 ## Current API contract

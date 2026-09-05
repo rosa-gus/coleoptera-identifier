@@ -41,17 +41,19 @@ type identifyResultMsg struct {
 
 // Model contains the main Bubble Tea interface state.
 type Model struct {
-	client       *api.Client
-	localizer    *i18n.Localizer
-	picker       filepicker.Model
-	spinner      spinner.Model
-	screen       screen
-	selectedPath string
-	preview      string
-	result       api.Identification
-	err          error
-	width        int
-	height       int
+	client         *api.Client
+	localizer      *i18n.Localizer
+	picker         filepicker.Model
+	spinner        spinner.Model
+	screen         screen
+	selectedPath   string
+	preview        string
+	result         api.Identification
+	err            error
+	languageMenu   bool
+	languageCursor int
+	width          int
+	height         int
 }
 
 // New creates a localized TUI connected to the API client.
@@ -102,6 +104,26 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" || msg.String() == "q" {
 			return m, tea.Quit
+		}
+		if m.languageMenu {
+			switch msg.String() {
+			case "up", "k":
+				m.languageCursor = (m.languageCursor + len(languageOptions) - 1) % len(languageOptions)
+			case "down", "j":
+				m.languageCursor = (m.languageCursor + 1) % len(languageOptions)
+			case "enter":
+				m.localizer = i18n.NewLocalizer(languageOptions[m.languageCursor])
+				m.languageMenu = false
+				applyPickerStyles(&m.picker, m.localizer)
+			case "esc":
+				m.languageMenu = false
+			}
+			return m, nil
+		}
+		if msg.String() == "l" {
+			m.languageMenu = true
+			m.languageCursor = languageOptionIndex(m.localizer.Locale())
+			return m, nil
 		}
 		if (m.screen == result || m.screen == failure) && (msg.String() == "r" || msg.String() == "enter") {
 			m.reset()
@@ -162,36 +184,40 @@ func (m Model) View() tea.View {
 	var body strings.Builder
 	body.WriteString(renderHeader(panelWidth))
 	body.WriteString("\n\n")
+	if m.languageMenu {
+		body.WriteString(renderLanguageMenu(m.languageCursor, m.localizer))
+	} else {
 
-	switch m.screen {
-	case selecting:
-		body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUISelectImage)))
-		body.WriteString("\n")
-		body.WriteString(subtle.Render(truncateText(safeText(m.picker.CurrentDirectory), contentWidth)))
-		body.WriteString("\n\n")
-		body.WriteString(m.picker.View())
-		if m.err != nil {
-			body.WriteString("\n" + noticeStyle.Render(safeText(m.err.Error())))
+		switch m.screen {
+		case selecting:
+			body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUISelectImage)))
+			body.WriteString("\n")
+			body.WriteString(subtle.Render(truncateText(safeText(m.picker.CurrentDirectory), contentWidth)))
+			body.WriteString("\n\n")
+			body.WriteString(m.picker.View())
+			if m.err != nil {
+				body.WriteString("\n" + noticeStyle.Render(safeText(m.err.Error())))
+			}
+			body.WriteString("\n" + helpStyle.Render(m.localizer.Text(i18n.TUINavigationHelp)))
+
+		case loading:
+			body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUIAnalyzing)))
+			body.WriteString("\n\n")
+			body.WriteString(fmt.Sprintf("%s %s", m.spinner.View(), m.localizer.Text(i18n.TUISendingImage)))
+			body.WriteString("\n\n")
+			body.WriteString(subtle.Render(safeText(filepath.Base(m.selectedPath))))
+			body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUICancelHelp)))
+
+		case result:
+			body.WriteString(renderResultWithPreview(m.result, m.preview, contentWidth, m.localizer))
+			body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUIResultHelp)))
+
+		case failure:
+			body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUIFailure)))
+			body.WriteString("\n\n")
+			body.WriteString(noticeStyle.Width(contentWidth).Render(safeText(m.err.Error())))
+			body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUIFailureHelp)))
 		}
-		body.WriteString("\n" + helpStyle.Render(m.localizer.Text(i18n.TUINavigationHelp)))
-
-	case loading:
-		body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUIAnalyzing)))
-		body.WriteString("\n\n")
-		body.WriteString(fmt.Sprintf("%s %s", m.spinner.View(), m.localizer.Text(i18n.TUISendingImage)))
-		body.WriteString("\n\n")
-		body.WriteString(subtle.Render(safeText(filepath.Base(m.selectedPath))))
-		body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUICancelHelp)))
-
-	case result:
-		body.WriteString(renderResultWithPreview(m.result, m.preview, contentWidth, m.localizer))
-		body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUIResultHelp)))
-
-	case failure:
-		body.WriteString(sectionTitle.Render(m.localizer.Text(i18n.TUIFailure)))
-		body.WriteString("\n\n")
-		body.WriteString(noticeStyle.Width(contentWidth).Render(safeText(m.err.Error())))
-		body.WriteString("\n\n" + helpStyle.Render(m.localizer.Text(i18n.TUIFailureHelp)))
 	}
 
 	panel := panelStyle.Width(panelWidth).Render(body.String())
@@ -239,6 +265,40 @@ func applyPickerStyles(picker *filepicker.Model, localizer *i18n.Localizer) {
 	picker.Styles.DisabledSelected = lipgloss.NewStyle().Foreground(mutedGreen)
 	picker.Styles.FileSize = lipgloss.NewStyle().Foreground(mutedGreen).Width(7).Align(lipgloss.Right)
 	picker.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(mutedGreen).SetString(localizer.Text(i18n.TUIEmptyDirectory))
+}
+
+var languageOptions = []i18n.Locale{i18n.EnglishUS, i18n.PortugueseBR}
+
+func languageOptionIndex(locale i18n.Locale) int {
+	for index, option := range languageOptions {
+		if option == locale {
+			return index
+		}
+	}
+	return 0
+}
+
+func renderLanguageMenu(cursor int, localizer *i18n.Localizer) string {
+	var body strings.Builder
+	body.WriteString(sectionTitle.Render(localizer.Text(i18n.TUILanguageTitle)))
+	body.WriteString("\n\n")
+	for index, locale := range languageOptions {
+		marker := " "
+		if index == cursor {
+			marker = "›"
+		}
+		label := languageNameKey(locale)
+		body.WriteString(fmt.Sprintf("%s %s  %s\n", marker, valueStyle.Render(localizer.Text(label)), subtle.Render(string(locale))))
+	}
+	body.WriteString("\n" + helpStyle.Render(localizer.Text(i18n.TUILanguageHelp)))
+	return body.String()
+}
+
+func languageNameKey(locale i18n.Locale) i18n.Key {
+	if locale == i18n.PortugueseBR {
+		return i18n.TUILanguagePortuguese
+	}
+	return i18n.TUILanguageEnglish
 }
 
 func renderHeader(width int) string {

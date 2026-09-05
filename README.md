@@ -188,7 +188,7 @@ conditional on the Coleoptera taxa represented by the model.
 | `BIOCLIP_MODEL` | `hf-hub:imageomics/bioclip` | OpenCLIP model to use |
 | `BIOCLIP_DEVICE` | `cpu` | PyTorch device, such as `cpu` or `cuda` |
 | `BIOCLIP_TOP_K` | `5` | Number of species candidates |
-| `BIOCLIP_ORDER_THRESHOLD` | `0.35` | Minimum score for accepting the suggested order |
+| `BIOCLIP_ORDER_THRESHOLD` | `0.35` | Minimum score for accepting a Coleoptera order suggestion |
 | `BIOCLIP_FAMILY_THRESHOLD` | `0.70` | Minimum score for suggesting a family |
 | `BIOCLIP_GENUS_THRESHOLD` | `0.65` | Minimum score for suggesting a genus |
 | `BIOCLIP_SPECIES_THRESHOLD` | `0.60` | Minimum score for suggesting a species |
