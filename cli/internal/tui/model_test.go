@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/i18n"
 )
 
 func TestSelectingViewFitsTerminalHeight(t *testing.T) {

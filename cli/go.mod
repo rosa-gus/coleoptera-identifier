@@ -1,4 +1,4 @@
-module github.com/luisgustavo/coleoptera_identifier/cli
+module github.com/rosa-gus/coleoptera_identifier/cli
 
 go 1.25.0
 

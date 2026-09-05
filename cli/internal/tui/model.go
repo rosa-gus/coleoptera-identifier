@@ -13,8 +13,8 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/api"
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/api"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/i18n"
 )
 
 const (

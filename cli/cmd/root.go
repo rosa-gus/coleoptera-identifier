@@ -4,8 +4,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/config"
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/config"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
 

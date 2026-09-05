@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/api"
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/i18n"
-	"github.com/luisgustavo/coleoptera_identifier/cli/internal/tui"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/api"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/i18n"
+	"github.com/rosa-gus/coleoptera_identifier/cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 

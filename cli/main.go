@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/luisgustavo/coleoptera_identifier/cli/cmd"
+	"github.com/rosa-gus/coleoptera_identifier/cli/cmd"
 )
 
 func main() {
