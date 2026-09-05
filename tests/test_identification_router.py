@@ -12,11 +12,12 @@ from PIL import Image
 from app.main import app
 from app.routers.identification import _decode_base64_image
 from app.schemas.identification import IdentificationResponse, Taxonomy
+from app.services.bioclip import InvalidImageError, _decode_image
 
 
 def encoded_image() -> str:
     buffer = io.BytesIO()
-    Image.new("RGB", (16, 16), "green").save(buffer, format="PNG")
+    Image.new("RGB", (64, 64), "green").save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
@@ -83,6 +84,13 @@ class Base64DecodingTests(unittest.TestCase):
             raised.exception.detail,
             "The image does not contain valid Base64.",
         )
+
+    def test_rejects_image_that_is_too_small(self) -> None:
+        buffer = io.BytesIO()
+        Image.new("RGB", (16, 64), "green").save(buffer, format="PNG")
+
+        with self.assertRaises(InvalidImageError):
+            _decode_image(buffer.getvalue())
 
 
 if __name__ == "__main__":

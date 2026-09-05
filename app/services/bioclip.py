@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 COLEOPTERA = "Coleoptera"
 DEFAULT_MODEL = "hf-hub:imageomics/bioclip"
 MAX_IMAGE_PIXELS = 25_000_000
+MIN_IMAGE_DIMENSION = 32
+MAX_ASPECT_RATIO = 20.0
 
 
 class ModelUnavailableError(RuntimeError):
@@ -404,8 +406,17 @@ def _decode_image(image_bytes: bytes) -> Image.Image:
     try:
         with Image.open(io.BytesIO(image_bytes)) as source:
             width, height = source.size
-            if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+            if width <= 0 or height <= 0:
+                raise InvalidImageError("The image dimensions are invalid")
+            if min(width, height) < MIN_IMAGE_DIMENSION:
+                raise InvalidImageError(
+                    f"The image is too small; both dimensions must be at least {MIN_IMAGE_DIMENSION} pixels"
+                )
+            if width * height > MAX_IMAGE_PIXELS:
                 raise InvalidImageError("The image dimensions exceed the safety limit")
+            aspect_ratio = max(width, height) / min(width, height)
+            if aspect_ratio > MAX_ASPECT_RATIO:
+                raise InvalidImageError("The image aspect ratio is not supported")
             source.seek(0)
             image = ImageOps.exif_transpose(source).convert("RGB")
             image.load()
