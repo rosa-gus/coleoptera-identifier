@@ -1,6 +1,6 @@
 # 🪲 Coleoptera Identifier
 
-![Coleoptera Identifier logo](./assets/coleoptera_logo.png)
+![Coleoptera Identifier logo](./docs/coleoptera_logo.png)
 
 A prototype for visual taxonomic identification of beetles. The API runs
 [BioCLIP](https://github.com/Imageomics/BioCLIP) on the server and returns the
@@ -12,6 +12,20 @@ v3.0 (GPL-3.0-only)**. See the complete terms in [`LICENSE.txt`](./LICENSE.txt).
 
 The result is **not a taxonomic determination**. Some species require additional
 views, collection metadata, scale, microscopy, or examination by a specialist.
+
+## Showcase
+
+<p align="center">
+  <img src="./docs/showcase/image01.png" alt="Example of beetle identification" width="700">
+</p>
+
+<p align="center">
+  <img src="./docs/showcase/image02.png" alt="Coleoptera Identifier interface" width="700">
+</p>
+
+<p align="center">
+  <img src="./docs/showcase/image03.png" alt="Identification result example" width="700">
+</p>
 
 ## Architecture
 
@@ -73,11 +87,41 @@ directly to BioCLIP.
 - `libmagic` installed on the system.
 - Enough memory and storage for the BioCLIP artifacts.
 
-On Debian or Ubuntu:
+<details>
+<summary>System dependency on Debian or Ubuntu</summary>
 
 ```bash
 sudo apt-get install libmagic1
 ```
+
+</details>
+
+<details>
+<summary>System dependency on Fedora and similar distributions</summary>
+
+On Fedora, RHEL, Rocky Linux, and AlmaLinux, the `file-libs` package provides
+the `libmagic` library used by `python-magic`:
+
+```bash
+sudo dnf install python3 python3-pip file-libs
+```
+
+On older systems that still use `yum`, the equivalent command is:
+
+```bash
+sudo yum install python3 python3-pip file-libs
+```
+
+</details>
+
+<details>
+<summary>Other distributions</summary>
+
+Install the runtime package that provides `libmagic` using your distribution's
+package manager. The package is commonly named `libmagic`, `libmagic1`, or
+`file-libs`.
+
+</details>
 
 ## Installation
 
