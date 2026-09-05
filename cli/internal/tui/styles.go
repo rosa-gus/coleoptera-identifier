@@ -56,6 +56,10 @@ func renderResultWithPreview(
 		body.WriteString(lipgloss.NewStyle().Width(width).Align(lipgloss.Center).Render(preview))
 		body.WriteString("\n\n")
 	}
+	if result.Status == "not_coleoptera" {
+		body.WriteString(noticeStyle.Width(width).Render(localizer.Text(i18n.TUIOutOfScope)))
+		return body.String()
+	}
 
 	name := result.Prediction
 	if name == "" {

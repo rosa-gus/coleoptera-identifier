@@ -24,6 +24,7 @@ const (
 	TUISendingImage      Key = "tui.sending_image"
 	TUICancelHelp        Key = "tui.cancel_help"
 	TUIResult            Key = "tui.result"
+	TUIOutOfScope        Key = "tui.out_of_scope"
 	TUIResultHelp        Key = "tui.result_help"
 	TUIFailure           Key = "tui.failure"
 	TUIFailureHelp       Key = "tui.failure_help"

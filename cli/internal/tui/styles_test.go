@@ -74,6 +74,24 @@ func TestRenderResultUsesPortugueseCatalog(t *testing.T) {
 	}
 }
 
+func TestRenderResultHidesTaxonomicResultOutsideScope(t *testing.T) {
+	t.Parallel()
+	result := api.Identification{
+		Status:         "not_coleoptera",
+		Prediction:     "Homo sapiens",
+		Identification: "Homo sapiens",
+		Confidence:     0.98,
+	}
+
+	rendered := RenderResult(result, 64, i18n.NewLocalizer(i18n.PortugueseBR))
+	if !strings.Contains(rendered, "Imagem verificada") {
+		t.Fatalf("out-of-scope message is missing: %q", rendered)
+	}
+	if strings.Contains(rendered, "Homo sapiens") || strings.Contains(rendered, "98,0%") {
+		t.Fatalf("taxonomic result leaked into out-of-scope view: %q", rendered)
+	}
+}
+
 func TestSafeTextRemovesTerminalControlCharacters(t *testing.T) {
 	t.Parallel()
 	if got := safeText("ladybug\x1b[31m"); strings.ContainsRune(got, '\x1b') {

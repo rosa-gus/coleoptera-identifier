@@ -16,7 +16,7 @@ views, collection metadata, scale, microscopy, or examination by a specialist.
 Go CLI/TUI
     │ Base64 image
     ▼
-FastAPI ── image validation
+FastAPI ── technical image validation
     │
     ▼
 BioCLIP ── general classification by order
@@ -31,6 +31,38 @@ BioCLIP ── general classification by order
 The model is loaded only on the first identification request. Starting the API
 and accessing its health endpoint do not download model artifacts or contact
 external services.
+
+### Scope validation
+
+The current preprocessing is limited to technical validation of the submitted
+image: supported format, file size, decodability, minimum dimensions, maximum
+pixel count, and supported aspect ratio. It does not determine whether the
+image contains a beetle, an invertebrate, another animal, or no relevant
+organism.
+
+Consequently, an image outside the project's biological scope can still reach
+BioCLIP. Since BioCLIP compares the image against its catalog and does not
+provide a reliable open-set `unknown` class, its score must not be interpreted
+as proof that the image contains a coleopteran.
+
+The recommended future architecture is a separate binary classification head
+before BioCLIP:
+
+```text
+image
+  └── technical validation
+        └── binary Coleoptera gate
+              ├── rejected or inconclusive → outside project scope
+              └── accepted → BioCLIP taxonomic suggestion
+```
+
+The head should be trained to distinguish `Coleoptera` from `not-Coleoptera`,
+including hard negative examples such as humans, plants, objects, spiders,
+other insects, and other animals. A practical implementation can initially
+freeze a pretrained visual encoder, train only a binary linear head, and
+calibrate its rejection threshold on a representative validation set. This
+head is not implemented yet; the current API sends technically valid images
+directly to BioCLIP.
 
 ## Requirements
 
@@ -182,6 +214,9 @@ catalog and images that do not contain Coleoptera.
 
 ## Scientific limitations
 
+- Technical image validation does not perform biological scope detection; a
+  future binary Coleoptera/non-Coleoptera head is needed to reject unrelated
+  images before taxonomic inference.
 - Coverage is limited to taxa represented in the model's Tree of Life data.
 - Neural network scores can be high for out-of-distribution images.
 - Order-level aggregation may reflect unequal numbers of represented taxa.

@@ -12,6 +12,7 @@
   "tui.sending_image": "Sending the image and waiting for identification…",
   "tui.cancel_help": "q cancel",
   "tui.result": "RESULT",
+  "tui.out_of_scope": "Image verified: the content is not a coleopteran (beetle).",
   "tui.result_help": "r/enter analyze another  •  q quit",
   "tui.failure": "IDENTIFICATION FAILED",
   "tui.failure_help": "r/enter try again  •  q quit",

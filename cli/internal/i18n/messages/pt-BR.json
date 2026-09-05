@@ -12,6 +12,7 @@
   "tui.sending_image": "Enviando a imagem e aguardando a identificação…",
   "tui.cancel_help": "q cancelar",
   "tui.result": "RESULTADO",
+  "tui.out_of_scope": "Imagem verificada: o conteúdo não é um coleóptero (besouro).",
   "tui.result_help": "r/enter analisar outra  •  q sair",
   "tui.failure": "IDENTIFICATION FAILED",
   "tui.failure_help": "r/enter tentar novamente  •  q sair",
