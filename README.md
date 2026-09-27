@@ -13,6 +13,10 @@ v3.0 (GPL-3.0-only)**. See the complete terms in [`LICENSE.txt`](./LICENSE.txt).
 The result is **not a taxonomic determination**. Some species require additional
 views, collection metadata, scale, microscopy, or examination by a specialist.
 
+> I'm not a biologist. I'm just a software developer with a lot of curiosity. 
+If you think this is a big mistake, you can always contribute by opening an issue 
+or submitting a PR.
+
 ## Prototype focus
 
 The prototype focuses on **Coleoptera species cataloged in Brazil**. The
