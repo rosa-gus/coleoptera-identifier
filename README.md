@@ -13,6 +13,27 @@ v3.0 (GPL-3.0-only)**. See the complete terms in [`LICENSE.txt`](./LICENSE.txt).
 The result is **not a taxonomic determination**. Some species require additional
 views, collection metadata, scale, microscopy, or examination by a specialist.
 
+## Prototype focus
+
+The prototype focuses on **Coleoptera species cataloged in Brazil**. The
+[Catálogo Taxonômico da Fauna do Brasil (CTFB)](https://fauna.jbrj.gov.br/fauna/)
+is the reference for selecting positive evaluation examples. A species can be
+in scope even when a particular photo was taken outside Brazil; the species'
+catalog status and the photo's location are recorded separately. Images of
+non-Coleoptera are deliberate negative examples for measuring rejection.
+
+This geographic catalog focus is an evaluation and product target, not yet an
+enforced API constraint. The current BioCLIP runtime compares an image against
+its full represented Tree of Life for the order decision and considers all
+represented Coleoptera taxa for lower-rank suggestions. It does not filter
+species against the CTFB. A species-level suggestion therefore does not yet
+guarantee that the name is cataloged in Brazil. The first scientific evaluation
+will measure this behavior before a Brazilian species filter or an out-of-scope
+response is added. See the [evaluation image protocol](./data/evaluation/README.md).
+
+The separate [Photo Curator TUI](./curator/README.md) helps collect evaluation
+photos from iNaturalist while keeping taxonomic and credit review manual.
+
 ## Showcase
 
 <p align="center">
@@ -256,8 +277,9 @@ cd cli && go test ./...
 
 The backend tests replace the BioCLIP runtime with deterministic results. They do
 not download model weights or claim to measure scientific accuracy. Scientific
-evaluation requires a separate labeled dataset that includes species outside the
-catalog and images that do not contain Coleoptera.
+evaluation requires a separate labeled dataset of Brazilian-cataloged
+Coleoptera species, including species absent from the model catalog, plus
+images that do not contain Coleoptera.
 
 ## Scientific limitations
 
@@ -265,6 +287,7 @@ catalog and images that do not contain Coleoptera.
   future binary Coleoptera/non-Coleoptera head is needed to reject unrelated
   images before taxonomic inference.
 - Coverage is limited to taxa represented in the model's Tree of Life data.
+- The API does not yet restrict its species suggestions to the Brazilian catalog.
 - Neural network scores can be high for out-of-distribution images.
 - Order-level aggregation may reflect unequal numbers of represented taxa.
 - The model always compares an image against its catalog; it does not provide a
